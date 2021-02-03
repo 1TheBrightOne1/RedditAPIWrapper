@@ -70,10 +70,11 @@ func (creds *Credentials) getToken(code string) {
 }
 
 func (creds *Credentials) manageRefresh() {
-	return
 	for {
-		dur, _ := time.ParseDuration(fmt.Sprintf("%ds", creds.Token.Expires-3590))
-		time.Sleep(dur)
+		dur := creds.Token.ExpiresOn.Sub(time.Now())
+		if dur.Seconds() > 0 {
+			time.Sleep(dur)
+		}
 
 		reader := strings.NewReader(fmt.Sprintf("grant_type=refresh_token&refresh_token=%s", creds.Token.Refresh))
 		client := &http.Client{}
