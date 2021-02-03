@@ -2,14 +2,31 @@ package main
 
 import (
 	"fmt"
-	"time"
+	"io/ioutil"
+	"log"
+	"os"
 
+	"github.com/1TheBrightOne1/RedditAPIWrapper/api"
+	"github.com/1TheBrightOne1/RedditAPIWrapper/models"
 	"github.com/1TheBrightOne1/RedditAPIWrapper/oauth"
 )
 
 func main() {
-	fmt.Println(oauth.CredentialsFilePath)
+	creds := oauth.GetCredentials()
+	resp, err := creds.SendRequest(api.Get_Hot("wallstreetbets", "", "", 0))
 
-	dur, _ := time.ParseDuration(("20s"))
-	time.Sleep(dur)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	body, _ := ioutil.ReadAll(resp.Body)
+
+	file, _ := os.Create("Response.json")
+
+	fmt.Fprintf(file, string(body))
+
+	file, _ = os.Open("Response.json")
+	b, _ := ioutil.ReadAll(file)
+	posts := models.NewPosts(b)
+	fmt.Println(posts)
 }

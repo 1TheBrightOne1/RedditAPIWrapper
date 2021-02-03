@@ -9,9 +9,13 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
+
+const Endpoint = "https://oauth.reddit.com"
 
 type Credentials struct {
 	ClientID     string `json:"clientID"`
@@ -19,6 +23,35 @@ type Credentials struct {
 	UserAgent    string `json:"userAgent"`
 	RedirectURL  string `json:"redirectURL"`
 	Token        *Token `json:"token"`
+	Used         int64
+	Remaining    int64
+	ResetTime    time.Time
+	Lock         *sync.RWMutex
+}
+
+func (creds *Credentials) SendRequest(req *http.Request) (*http.Response, error) {
+	creds.Lock.RLock()
+	defer creds.Lock.RUnlock()
+
+	if time.Now().Before(creds.ResetTime) && creds.Remaining <= 0 {
+		dur := time.Now().Sub(creds.ResetTime)
+		time.Sleep(dur)
+	}
+
+	bearer := "Bearer " + creds.Token.Token
+
+	req.Header.Add("Authorization", bearer)
+	req.Header.Add("User-Agent", creds.UserAgent)
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+
+	creds.Used, _ = strconv.ParseInt(resp.Header.Get("X-Ratelimit-Used"), 10, 64)
+	creds.Remaining, _ = strconv.ParseInt(resp.Header.Get("X-Ratelimit-Remaining"), 10, 64)
+	resetTime := resp.Header.Get("X-Ratelimit-Reset")
+
+	fmt.Println(resetTime)
+	return resp, err
 }
 
 func (creds *Credentials) startAuthorizationGrant() {
@@ -76,9 +109,13 @@ func (creds *Credentials) manageRefresh() {
 			time.Sleep(dur)
 		}
 
+		creds.Lock.Lock()
+		defer creds.Lock.Unlock()
 		reader := strings.NewReader(fmt.Sprintf("grant_type=refresh_token&refresh_token=%s", creds.Token.Refresh))
 		client := &http.Client{}
 		req, _ := http.NewRequest("POST", "https://www.reddit.com/api/v1/access_token", reader)
+
+		req.SetBasicAuth(creds.ClientID, creds.ClientSecret)
 		req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 		req.Header.Add("User-Agent", creds.UserAgent)
 

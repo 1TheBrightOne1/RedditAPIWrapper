@@ -9,11 +9,35 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 )
 
 var (
 	CredentialsFilePath string
 )
+
+func GetCredentials() *Credentials {
+	dir, err := filepath.Abs(filepath.Dir(os.Args[0]))
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	CredentialsFilePath = filepath.Join(dir, ".credentials")
+
+	if _, err := os.Stat(CredentialsFilePath); err != nil {
+		getAppCredentials()
+	}
+
+	creds := loadCredentialsFromFile()
+
+	if creds.Token == nil {
+		creds.startAuthorizationGrant()
+	}
+
+	go creds.manageRefresh()
+
+	return creds
+}
 
 func getAppCredentials() {
 
@@ -60,24 +84,7 @@ func loadCredentialsFromFile() *Credentials {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	creds.Lock = &sync.RWMutex{}
 	return creds
-}
-
-func init() {
-	dir, err := filepath.Abs(filepath.Dir(os.Args[0]))
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	CredentialsFilePath = filepath.Join(dir, ".credentials")
-
-	if _, err := os.Stat(CredentialsFilePath); err != nil {
-		getAppCredentials()
-	}
-
-	creds := loadCredentialsFromFile()
-
-	if creds.Token == nil || creds.isExpired() {
-		creds.startAuthorizationGrant()
-	}
 }
