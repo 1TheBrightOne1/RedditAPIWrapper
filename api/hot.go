@@ -8,24 +8,13 @@ import (
 )
 
 func Get_Hot(subreddit, before, after string, limit int) *http.Request {
-	url := fmt.Sprintf("%s/r/%s/hot", oauth.Endpoint, subreddit)
-
-	if before != "" && after != "" {
-		return nil
-	} else if before != "" {
-		url += "?before=" + before
-	} else if after != "" {
-		url += "after=" + after
-	}
-
-	if limit > 0 {
-		panic("Needs param formatting")
-		url += "limit=" + fmt.Sprint(limit)
-	}
+	url := AttachParams(fmt.Sprintf("%s/r/%s/hot", oauth.Endpoint, subreddit), map[string]string{
+		"before": before,
+		"after":  after,
+		"limit":  fmt.Sprint(limit),
+	})
 
 	req, _ := http.NewRequest("GET", url, nil)
-
-	fmt.Println(url)
 
 	return req
 }

@@ -24,7 +24,7 @@ type Credentials struct {
 	RedirectURL  string `json:"redirectURL"`
 	Token        *Token `json:"token"`
 	Used         int64
-	Remaining    int64
+	Remaining    float64
 	ResetTime    time.Time
 	Lock         *sync.RWMutex
 }
@@ -47,10 +47,10 @@ func (creds *Credentials) SendRequest(req *http.Request) (*http.Response, error)
 	resp, err := client.Do(req)
 
 	creds.Used, _ = strconv.ParseInt(resp.Header.Get("X-Ratelimit-Used"), 10, 64)
-	creds.Remaining, _ = strconv.ParseInt(resp.Header.Get("X-Ratelimit-Remaining"), 10, 64)
+	creds.Remaining, _ = strconv.ParseFloat(resp.Header.Get("X-Ratelimit-Remaining"), 64)
 	resetTime := resp.Header.Get("X-Ratelimit-Reset")
 
-	fmt.Println(resetTime)
+	fmt.Println(creds.Used, creds.Remaining, resetTime)
 	return resp, err
 }
 
