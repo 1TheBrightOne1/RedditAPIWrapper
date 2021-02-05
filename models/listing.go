@@ -79,3 +79,24 @@ func NewListing(bytes []byte) []Listing {
 
 	return []Listing{listing}
 }
+
+func WalkListing(in interface{}, handle func(Listing)) {
+	if listing, ok := in.(Listing); ok {
+		if listing.Kind == "Listing" {
+			WalkListing(listing.Data.Children.Listings, handle)
+		} else {
+			handle(listing)
+		}
+
+		if len(listing.Data.Children.Listings) > 0 {
+			for _, child := range listing.Data.Children.Listings {
+				WalkListing(child, handle)
+			}
+		}
+
+	} else if listingSlice, ok := in.([]Listing); ok {
+		for _, listing := range listingSlice {
+			WalkListing(listing, handle)
+		}
+	}
+}

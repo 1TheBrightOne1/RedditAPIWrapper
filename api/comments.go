@@ -11,7 +11,6 @@ import (
 func Get_Comments(link string) *http.Request {
 	url := fmt.Sprintf("%s%s", oauth.Endpoint, link)
 
-	fmt.Println(url)
 	req, _ := http.NewRequest("GET", url, nil)
 
 	return req
@@ -23,7 +22,6 @@ func Get_MoreChildren(article string, childIds []string) *http.Request {
 		"link_id":  article,
 	})
 
-	fmt.Println(url)
 	req, _ := http.NewRequest("GET", url, nil)
 
 	return req

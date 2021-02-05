@@ -18,7 +18,7 @@ func AttachParams(url string, params map[string]string) string {
 
 	//If no params were added because they were all blank
 	if count == 0 {
-		return url[:len(url)-2]
+		return url[:len(url)-1]
 	}
 
 	return url[:len(url)-1]

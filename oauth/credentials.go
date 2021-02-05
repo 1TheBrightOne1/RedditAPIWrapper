@@ -12,30 +12,44 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
 const Endpoint = "https://oauth.reddit.com"
 
 type Credentials struct {
-	ClientID     string `json:"clientID"`
-	ClientSecret string `json:"clientSecret"`
-	UserAgent    string `json:"userAgent"`
-	RedirectURL  string `json:"redirectURL"`
-	Token        *Token `json:"token"`
-	Used         int64
-	Remaining    float64
-	ResetTime    time.Time
-	Lock         *sync.RWMutex
+	ClientID     string        `json:"clientID"`
+	ClientSecret string        `json:"clientSecret"`
+	UserAgent    string        `json:"userAgent"`
+	RedirectURL  string        `json:"redirectURL"`
+	Token        *Token        `json:"token"`
+	Used         int64         `json:"-"`
+	Lock         *sync.RWMutex `json:"-"`
+	Wait         chan int      `json:"-"`
+	ResetTime    time.Time     `json:"-"`
 }
 
 func (creds *Credentials) SendRequest(req *http.Request) (*http.Response, error) {
 	creds.Lock.RLock()
 	defer creds.Lock.RUnlock()
 
-	if time.Now().Before(creds.ResetTime) && creds.Remaining <= 0 {
-		dur := time.Now().Sub(creds.ResetTime)
-		time.Sleep(dur)
+	fmt.Println(req.URL)
+
+	used := atomic.AddInt64(&creds.Used, 1)
+
+	if used == 1 {
+		fmt.Println("Starting rate timer")
+
+		dur, _ := time.ParseDuration("60s")
+		creds.ResetTime = time.Now().Add(dur)
+	}
+
+	if creds.LimitHit() {
+		fmt.Println("Waiting for rate limit reset")
+		time.Sleep(time.Now().Sub(creds.ResetTime))
+		creds.Used = 0
+		fmt.Println("Resuming")
 	}
 
 	bearer := "Bearer " + creds.Token.Token
@@ -46,12 +60,34 @@ func (creds *Credentials) SendRequest(req *http.Request) (*http.Response, error)
 	client := &http.Client{}
 	resp, err := client.Do(req)
 
-	creds.Used, _ = strconv.ParseInt(resp.Header.Get("X-Ratelimit-Used"), 10, 64)
-	creds.Remaining, _ = strconv.ParseFloat(resp.Header.Get("X-Ratelimit-Remaining"), 64)
-	resetTime := resp.Header.Get("X-Ratelimit-Reset")
+	rateUsed, _ := strconv.ParseInt(resp.Header.Get("X-Ratelimit-Used"), 10, 64)
+	remaining, _ := strconv.ParseFloat(resp.Header.Get("X-Ratelimit-Remaining"), 64)
+	resetTime, _ := strconv.ParseInt(resp.Header.Get("X-Ratelimit-Reset"), 10, 64)
 
-	fmt.Println(creds.Used, creds.Remaining, resetTime)
+	if remaining <= 0 {
+		dur, _ := time.ParseDuration(fmt.Sprintf("%ds", resetTime))
+		time.Sleep(dur)
+	}
+
+	fmt.Println(rateUsed, remaining, resetTime)
 	return resp, err
+}
+
+func (cred *Credentials) LimitHit() bool {
+	return cred.Used >= 60
+}
+
+func (creds *Credentials) manageRate() {
+	dur, _ := time.ParseDuration("60s")
+	time.Sleep(dur)
+
+	creds.Lock.Lock()
+	defer creds.Lock.Unlock()
+
+	fmt.Println("Resetting rate")
+
+	creds.Used = 0
+	creds.Wait <- 1
 }
 
 func (creds *Credentials) startAuthorizationGrant() {
@@ -109,6 +145,7 @@ func (creds *Credentials) manageRefresh() {
 			time.Sleep(dur)
 		}
 
+		fmt.Println("Refreshing token")
 		creds.Lock.Lock()
 		defer creds.Lock.Unlock()
 		reader := strings.NewReader(fmt.Sprintf("grant_type=refresh_token&refresh_token=%s", creds.Token.Refresh))
