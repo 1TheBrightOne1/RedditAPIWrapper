@@ -1,10 +1,13 @@
 package wsbmonitor
 
 import (
+	"fmt"
+	"os"
 	"sync"
 	"time"
 
 	"github.com/1TheBrightOne1/RedditAPIWrapper/metrics"
+	"github.com/1TheBrightOne1/RedditAPIWrapper/models"
 )
 
 const maxWatchTime = "2d"
@@ -18,68 +21,72 @@ type watchedItem struct {
 	firstScraped time.Time
 }
 
-func newWatchedItem(id, article string, stocks []string, upvotes int) watchedItem {
+func newWatchedItem(id, article string, stocks map[string]int) watchedItem {
 	w := watchedItem{
 		id:           id,
 		article:      article,
-		stocks:       make(map[string]int),
+		stocks:       stocks,
 		firstScraped: time.Now(),
 		lastScraped:  time.Now(),
-		upvotes:      upvotes,
 	}
 
-	if upvotes < 0 {
-		upvotes = 0
-	}
-
-	for _, stock := range stocks {
-		w.stocks[stock] = 1
-
-		metrics.Counter.WithLabelValues(stock).Add(float64(upvotes))
+	for stock, score := range stocks {
+		if score > 0 {
+			metrics.Counter.WithLabelValues(stock).Add(float64(score))
+		}
 	}
 
 	return w
 }
 
-func (w *watchedItem) update(newUpvotes int) bool {
-	if newUpvotes-w.upvotes > 0 {
-		for stock, _ := range w.stocks {
-			metrics.Counter.WithLabelValues(stock).Add(float64(newUpvotes - w.upvotes))
+func (w *watchedItem) update(updatedStocks map[string]int) bool {
+	totalIncrease := 0
+	for stock, score := range updatedStocks {
+		if scoreIncrease := score - w.stocks[stock]; scoreIncrease > 0 {
+			metrics.Counter.WithLabelValues(stock).Add(float64(scoreIncrease))
+			totalIncrease += scoreIncrease
 		}
 	}
-	w.upvotes = newUpvotes
 
-	ratio := float64(newUpvotes) / time.Now().Sub(w.lastScraped).Hours()
+	ratio := float64(totalIncrease) / time.Now().Sub(w.lastScraped).Hours()
 	metrics.UpvotesPerHour.Observe(ratio)
-	if ratio < 3.0 {
+	if ratio < 30.0 {
 		return false
 	}
 
-	//TODO: Add logic for max expiration
+	w.lastScraped = time.Now()
+	w.stocks = updatedStocks
 	return true
 }
 
 type watchList struct {
-	posts    []watchedItem
-	comments map[string][]string //key=articleID, value is a slice of strings with other watched comments so they can be batch fetched
-	lock     *sync.RWMutex
+	posts []watchedItem
+	lock  *sync.RWMutex
 }
 
 func newWatchList() *watchList {
 	return &watchList{
-		posts:    make([]watchedItem, 10),
-		lock:     &sync.RWMutex{},
-		comments: make(map[string][]string),
+		posts: make([]watchedItem, 10),
+		lock:  &sync.RWMutex{},
 	}
 }
 
-func (m *watchList) addToWatchList(id, permalink string, stocks []string, upvotes int) {
-	if id[:2] == "t1" {
-		permalink := permalink[:len(permalink)-len(id)]
-		commentSlice := m.comments[permalink]
-		m.comments[permalink] = append(commentSlice, id)
+func (m *watchList) GetArticlesByStock(stock string) {
+	f, _ := os.Create(fmt.Sprintf("%s.requested", stock))
+	defer f.Close()
+	for _, watched := range m.posts {
+		for s := range watched.stocks {
+			if stock == s {
+				fmt.Fprintf(f, "%s\n%v\n", watched.article, watched.stocks)
+			}
+		}
 	}
-	m.posts = append(m.posts, newWatchedItem(id, permalink, stocks, upvotes))
+}
+
+func (m *watchList) addToWatchList(id, permalink string, stocks map[string]int) {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+	m.posts = append(m.posts, newWatchedItem(id, permalink, stocks))
 }
 
 func (m *watchList) getFreshPost() watchedItem {
@@ -99,41 +106,21 @@ func (m *watchList) getFreshPost() watchedItem {
 	return watchedItem{}
 }
 
-func (m *watchList) updatePost(id string, upvotes int) {
+func (m *watchList) updatePost(listing models.Listing, stocks map[string]int) {
 	m.lock.RLock()
 	for i, post := range m.posts {
-		if post.id == id {
-			if !post.update(upvotes) {
+		if post.id == listing.Data.Name {
+			if !post.update(stocks) {
 				m.lock.RUnlock()
 				m.lock.Lock()
 				defer m.lock.Unlock()
 				m.posts = append(m.posts[0:i], m.posts[i+1:]...)
-				m.pruneWatchList(post)
 				return
 			}
-			break
+			return
 		}
 	}
+
 	m.lock.RUnlock()
-}
-
-func (m *watchList) pruneWatchList(post watchedItem) {
-	if post.id[0:2] == "t3" {
-		comments := m.comments[post.article]
-		m.comments[post.article] = []string{}
-
-		for _, comment := range comments {
-			for i, post := range m.posts {
-				if comment == post.id {
-					m.posts = append(m.posts[0:i], m.posts[i+1:]...)
-				}
-			}
-		}
-	} else if post.id[0:2] == "t1" {
-		for i, comment := range m.comments[post.article] {
-			if post.id == comment {
-				m.comments[post.article] = append(m.comments[post.article][0:i], m.comments[post.article][i+1:]...)
-			}
-		}
-	}
+	m.addToWatchList(listing.Data.Name, listing.Data.Link, stocks)
 }

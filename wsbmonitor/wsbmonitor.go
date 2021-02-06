@@ -16,8 +16,8 @@ import (
 )
 
 var (
-	charsOnly   = regexp.MustCompile(`\w+`)
-	knownStocks map[string]string
+	charsOnly     = regexp.MustCompile(`\w+`)
+	watchedStocks map[string]string
 )
 
 type Scraper struct {
@@ -46,19 +46,23 @@ func (s *Scraper) Scrape() {
 	}
 }
 
+func (s *Scraper) GetArticlesByStock(stock string) {
+	s.watchList.GetArticlesByStock(stock)
+}
+
 func (s *Scraper) getHotArticles() {
 	fmt.Println("Getting Hot Articles")
 	resp, err := s.creds.SendRequest(api.Get_Hot("wallstreetbets", "", "", 0))
 
 	if err != nil {
-		log.Fatal(err)
+		fmt.Println(err)
 	}
 
 	body, _ := ioutil.ReadAll(resp.Body)
 
 	listings := models.NewListing(body)
 
-	models.WalkListing(listings, s.addListingsToWatchList())
+	go models.WalkListing(listings, s.addListingsToWatchList())
 }
 
 func (s *Scraper) getNewArticles() {
@@ -66,14 +70,34 @@ func (s *Scraper) getNewArticles() {
 	resp, err := s.creds.SendRequest(api.Get_New("wallstreetbets", "", s.after, 0))
 
 	if err != nil {
-		log.Fatal(err)
+		log.Println(err)
 	}
 
 	body, _ := ioutil.ReadAll(resp.Body)
 
 	listings := models.NewListing(body)
 
-	models.WalkListing(listings, s.addListingsToWatchList())
+	go models.WalkListing(listings, s.addListingsToWatchList())
+}
+
+func (s *Scraper) getUpdatedListings() {
+	for {
+		post := s.watchList.getFreshPost()
+		if post.id == "" {
+			return
+		}
+
+		resp, err := s.creds.SendRequest(api.Get_Comments(post.article))
+
+		if err != nil {
+			return
+		}
+
+		body, _ := ioutil.ReadAll(resp.Body)
+
+		listing := models.NewListing(body)
+		s.updateArticleScore(listing)
+	}
 }
 
 func (s *Scraper) getCommentsForArticle(link string) {
@@ -88,86 +112,50 @@ func (s *Scraper) getCommentsForArticle(link string) {
 
 	listings := models.NewListing(body)
 
-	models.WalkListing(listings, s.addCommentsToWatchList())
-}
-
-func (s *Scraper) getUpdatedListings() {
-	for {
-		post := s.watchList.getFreshPost()
-		if post.id == "" {
-			return
-		}
-
-		if post.id[0:2] == "t3" {
-			resp, err := s.creds.SendRequest(api.Get_Comments(post.article))
-
-			if err != nil {
-				return
-			}
-
-			body, _ := ioutil.ReadAll(resp.Body)
-
-			listing := models.NewListing(body)
-			models.WalkListing(listing, s.updateArticle())
-		} else if post.id[0:2] == "t1" {
-			commentIds := s.watchList.comments[post.article]
-			resp, err := s.creds.SendRequest(api.Get_MoreChildren(post.article, commentIds))
-
-			if err != nil {
-				return
-			}
-
-			body, _ := ioutil.ReadAll(resp.Body)
-
-			listing := models.NewListing(body)
-			models.WalkListing(listing, s.updateComment())
-		}
-	}
+	go s.updateArticleScore(listings)
 }
 
 func (s *Scraper) addListingsToWatchList() func(models.Listing) {
 	return func(listing models.Listing) {
 		if listing.Kind == "t3" {
 			fmt.Printf("Adding %s to watch list\n", listing.Data.Name)
-			s.watchList.addToWatchList(listing.Data.Name, listing.Data.Link, extractTickers(listing.Data.Title), listing.Data.Ups)
+			stocks := extractTickers(listing.Data.Title)
+			for stock, _ := range stocks {
+				stocks[stock] = listing.Data.Ups
+			}
 
 			s.getCommentsForArticle(listing.Data.Link)
 		}
 	}
 }
 
-func (s *Scraper) addCommentsToWatchList() func(models.Listing) {
-	return func(listing models.Listing) {
-		if listing.Kind == "t1" {
-			tickers := extractTickers(listing.Data.Body)
-			if len(tickers) > 0 {
-				fmt.Printf("Adding %s to watch list\n", listing.Data.Name)
-				s.watchList.addToWatchList(listing.Data.Name, listing.Data.Link, tickers, listing.Data.Ups)
+//updateArticleScore takes a root listing and aggregates all stock mentions and upvotes
+func (s *Scraper) updateArticleScore(listings []models.Listing) {
+	score := make(map[string]int)
+	var root models.Listing
+
+	aggregator := func(listing models.Listing) {
+		if listing.Kind == "t3" {
+			root = listing
+			stocks := extractTickers(listing.Data.Title)
+			for stock := range stocks {
+				score[stock] += listing.Data.Ups
+			}
+		} else if listing.Kind == "t1" {
+			stocks := extractTickers(listing.Data.Body)
+			for stock := range stocks {
+				score[stock] += listing.Data.Ups
 			}
 		}
 	}
+
+	models.WalkListing(listings, aggregator)
+
+	s.watchList.updatePost(root, score)
 }
 
-func (s *Scraper) updateArticle() func(models.Listing) {
-	return func(listing models.Listing) {
-		if listing.Kind == "t3" {
-			fmt.Printf("Updating article %s\n", listing.Data.Name)
-			s.watchList.updatePost(listing.Data.Name, listing.Data.Ups)
-		}
-	}
-}
-
-func (s *Scraper) updateComment() func(models.Listing) {
-	return func(listing models.Listing) {
-		if listing.Kind == "t1" {
-			fmt.Printf("Updating comment %s\n", listing.Data.Name)
-			s.watchList.updatePost(listing.Data.Name, listing.Data.Ups)
-		}
-	}
-}
-
-func extractTickers(text string) []string {
-	var tickers []string
+func extractTickers(text string) map[string]int {
+	stocks := make(map[string]int)
 	words := strings.Split(text, " ")
 
 	for _, word := range words {
@@ -175,22 +163,31 @@ func extractTickers(text string) []string {
 
 		for _, match := range matches {
 			cleaned := strings.ToLower(match)
-			if stock, ok := knownStocks[cleaned]; ok {
-				tickers = append(tickers, stock)
+			if stock, ok := watchedStocks[cleaned]; ok {
+				stocks[stock] = 1
 			}
 		}
 	}
 
-	if len(tickers) > 0 {
-		fmt.Printf("Tickers found %v\n", tickers)
+	if len(stocks) > 0 {
+		fmt.Printf("Stocks found %v\n", stocks)
 	}
 
-	return tickers
+	return stocks
+}
+
+func AddToIgnoredStocks(stock string) {
+	delete(watchedStocks, stock)
+
+	f, _ := os.OpenFile("common.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	defer f.Close()
+
+	f.WriteString(stock + "\n")
 }
 
 func init() {
-	common := make(map[string]string)
-	file, err := os.Open("common.txt")
+	ignoredStocks := make(map[string]string)
+	file, err := os.Open("ignoredStocks.txt")
 	if err == nil {
 		reader := bufio.NewReader(file)
 		for {
@@ -199,11 +196,11 @@ func init() {
 			if err != nil {
 				break
 			}
-			common[word] = word
+			ignoredStocks[word] = word
 		}
 	}
 
-	knownStocks = make(map[string]string)
+	watchedStocks = make(map[string]string)
 	file, err = os.Open("tickers.txt")
 	if err != nil {
 		log.Fatal(err)
@@ -217,9 +214,9 @@ func init() {
 			break
 		}
 
-		_, ok := common[line[0]]
+		_, ok := ignoredStocks[line[0]]
 		if !ok {
-			knownStocks[line[0]] = line[1]
+			watchedStocks[line[0]] = line[1]
 		} else {
 			fmt.Println(line[0])
 		}

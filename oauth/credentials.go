@@ -12,7 +12,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 )
 
@@ -36,9 +35,9 @@ func (creds *Credentials) SendRequest(req *http.Request) (*http.Response, error)
 
 	fmt.Println(req.URL)
 
-	used := atomic.AddInt64(&creds.Used, 1)
+	creds.Used++
 
-	if used == 1 {
+	if creds.Used == 1 {
 		fmt.Println("Starting rate timer")
 
 		dur, _ := time.ParseDuration("60s")
