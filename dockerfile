@@ -2,8 +2,10 @@ FROM golang:1.14
 
 COPY . ./src/github.com/1TheBrightOne1/RedditAPIWrapper
 
-RUN cd ./src/github.com/1TheBrightOne1/RedditAPIWrapper ; go get ./...
+WORKDIR ./src/github.com/1TheBrightOne1/RedditAPIWrapper
 
-RUN cd ./src/github.com/1TheBrightOne1/RedditAPIWrapper ; go build main.go
+RUN go get ./...
 
-ENTRYPOINT ["cd ./src/github.com/1TheBrightOne1/RedditAPIWrapper ; ./main"]
+RUN go build main.go
+
+ENTRYPOINT ["./main"]
