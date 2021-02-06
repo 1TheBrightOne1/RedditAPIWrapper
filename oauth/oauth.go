@@ -87,6 +87,10 @@ func loadCredentialsFromFile() *Credentials {
 		log.Fatal(err)
 	}
 
+	if creds == nil {
+		return nil
+	}
+
 	creds.Lock = &sync.RWMutex{}
 	return creds
 }
