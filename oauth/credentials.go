@@ -60,6 +60,21 @@ func (creds *Credentials) SendRequest(req *http.Request) (*http.Response, error)
 	client := &http.Client{}
 	resp, err := client.Do(req)
 
+	if err != nil {
+		fmt.Println("Error in client.Do. Waiting and retrying")
+		creds.Lock.RUnlock()
+		fmt.Println(err.Error())
+		timeout, _ := time.ParseDuration("2s")
+		time.Sleep(timeout)
+
+		creds.Lock.RLock()
+		resp, err = client.Do(req)
+
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	rateUsed, _ := strconv.ParseInt(resp.Header.Get("X-Ratelimit-Used"), 10, 64)
 	remaining, _ := strconv.ParseFloat(resp.Header.Get("X-Ratelimit-Remaining"), 64)
 	resetTime, _ := strconv.ParseInt(resp.Header.Get("X-Ratelimit-Reset"), 10, 64)

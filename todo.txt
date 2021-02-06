@@ -1,0 +1,8 @@
+Don't add comments to refresh list
+Refetch the post itself with hot/trending comments
+    For each stock mentioned, look at it's upvotes and create aggregate score
+    Save that aggregate score per stock on an article and increment by the change
+Push logs to another output
+Run the scraper in a separate go routine and add cmd line functionality to:
+    add tickers to do not watch list
+    search for tickers and see what articles mention it
