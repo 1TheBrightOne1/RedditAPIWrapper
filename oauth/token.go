@@ -3,7 +3,6 @@ package oauth
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"time"
 )
 
@@ -21,7 +20,8 @@ func NewToken(respBody []byte) *Token {
 	fmt.Println(string(respBody))
 	err := json.Unmarshal(respBody, token)
 	if err != nil {
-		log.Fatal(err)
+		fmt.Println(err)
+		return nil
 	}
 
 	dur, _ := time.ParseDuration(fmt.Sprintf("%ds", token.Expires))

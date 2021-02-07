@@ -35,8 +35,8 @@ func NewScraper() *Scraper {
 }
 
 func (s *Scraper) Scrape() {
-	s.getHotArticles()
-
+	//s.getHotArticles()
+	s.after = ""
 	for {
 		s.getNewArticles()
 
@@ -62,7 +62,7 @@ func (s *Scraper) getHotArticles() {
 
 	listings := models.NewListing(body)
 
-	go models.WalkListing(listings, s.addListingsToWatchList())
+	models.WalkListing(listings, s.addListingsToWatchList())
 }
 
 func (s *Scraper) getNewArticles() {
@@ -75,13 +75,25 @@ func (s *Scraper) getNewArticles() {
 
 	body, _ := ioutil.ReadAll(resp.Body)
 
+	f, _ := os.Create("out.json")
+	fmt.Fprintf(f, "%s", string(body))
+	f.Close()
+
 	listings := models.NewListing(body)
 
-	go models.WalkListing(listings, s.addListingsToWatchList())
+	s.after = listings[0].Data.After
+
+	models.WalkListing(listings, s.addListingsToWatchList())
 }
 
 func (s *Scraper) getUpdatedListings() {
+	dur, _ := time.ParseDuration("60s")
+	stopAfter := time.Now().Add(dur)
 	for {
+		if stopAfter.Sub(time.Now()).Seconds() < 0 {
+			return
+		}
+
 		post := s.watchList.getFreshPost()
 		if post.id == "" {
 			return
@@ -112,17 +124,13 @@ func (s *Scraper) getCommentsForArticle(link string) {
 
 	listings := models.NewListing(body)
 
-	go s.updateArticleScore(listings)
+	s.updateArticleScore(listings)
 }
 
 func (s *Scraper) addListingsToWatchList() func(models.Listing) {
 	return func(listing models.Listing) {
 		if listing.Kind == "t3" {
 			fmt.Printf("Adding %s to watch list\n", listing.Data.Name)
-			stocks := extractTickers(listing.Data.Title)
-			for stock, _ := range stocks {
-				stocks[stock] = listing.Data.Ups
-			}
 
 			s.getCommentsForArticle(listing.Data.Link)
 		}

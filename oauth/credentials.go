@@ -149,7 +149,6 @@ func (creds *Credentials) getToken(code string) {
 
 	file, _ := os.Create(CredentialsFilePath)
 	creds.writeToFile(file)
-	go creds.manageRefresh()
 }
 
 func (creds *Credentials) manageRefresh() {
@@ -177,12 +176,14 @@ func (creds *Credentials) manageRefresh() {
 
 		body, _ := ioutil.ReadAll(resp.Body)
 		newToken := NewToken(body)
-		newToken.Refresh = creds.Token.Refresh
-		creds.Token = newToken
 
-		file, _ := os.Create(CredentialsFilePath)
-		creds.writeToFile(file)
-		return
+		if newToken != nil {
+			newToken.Refresh = creds.Token.Refresh
+			creds.Token = newToken
+
+			file, _ := os.Create(CredentialsFilePath)
+			creds.writeToFile(file)
+		}
 	}
 }
 
