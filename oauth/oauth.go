@@ -36,8 +36,6 @@ func GetCredentials() *Credentials {
 
 	creds.Wait = make(chan int)
 
-	go creds.manageRefresh()
-
 	return creds
 }
 

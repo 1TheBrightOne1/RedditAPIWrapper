@@ -59,12 +59,11 @@ func (creds *Credentials) SendRequest(req *http.Request) (*http.Response, error)
 	client := &http.Client{}
 	resp, err := client.Do(req)
 
-	if err != nil {
+	if resp.StatusCode != 200 {
 		fmt.Println("Error in client.Do. Waiting and retrying")
 		creds.Lock.RUnlock()
-		fmt.Println(err.Error())
-		timeout, _ := time.ParseDuration("2s")
-		time.Sleep(timeout)
+
+		creds.refreshToken()
 
 		creds.Lock.RLock()
 		resp, err = client.Do(req)
@@ -151,39 +150,32 @@ func (creds *Credentials) getToken(code string) {
 	creds.writeToFile(file)
 }
 
-func (creds *Credentials) manageRefresh() {
-	for {
-		dur := creds.Token.ExpiresOn.Sub(time.Now())
-		if dur.Seconds() > 0 {
-			time.Sleep(dur)
-		}
+func (creds *Credentials) refreshToken() {
+	fmt.Println("Refreshing token")
+	creds.Lock.Lock()
+	defer creds.Lock.Unlock()
+	reader := strings.NewReader(fmt.Sprintf("grant_type=refresh_token&refresh_token=%s", creds.Token.Refresh))
+	client := &http.Client{}
+	req, _ := http.NewRequest("POST", "https://www.reddit.com/api/v1/access_token", reader)
 
-		fmt.Println("Refreshing token")
-		creds.Lock.Lock()
-		defer creds.Lock.Unlock()
-		reader := strings.NewReader(fmt.Sprintf("grant_type=refresh_token&refresh_token=%s", creds.Token.Refresh))
-		client := &http.Client{}
-		req, _ := http.NewRequest("POST", "https://www.reddit.com/api/v1/access_token", reader)
+	req.SetBasicAuth(creds.ClientID, creds.ClientSecret)
+	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Add("User-Agent", creds.UserAgent)
 
-		req.SetBasicAuth(creds.ClientID, creds.ClientSecret)
-		req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
-		req.Header.Add("User-Agent", creds.UserAgent)
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Fatal(err)
+	}
 
-		resp, err := client.Do(req)
-		if err != nil {
-			log.Fatal(err)
-		}
+	body, _ := ioutil.ReadAll(resp.Body)
+	newToken := NewToken(body)
 
-		body, _ := ioutil.ReadAll(resp.Body)
-		newToken := NewToken(body)
+	if newToken != nil {
+		newToken.Refresh = creds.Token.Refresh
+		creds.Token = newToken
 
-		if newToken != nil {
-			newToken.Refresh = creds.Token.Refresh
-			creds.Token = newToken
-
-			file, _ := os.Create(CredentialsFilePath)
-			creds.writeToFile(file)
-		}
+		file, _ := os.Create(CredentialsFilePath)
+		creds.writeToFile(file)
 	}
 }
 
