@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"os"
 	"regexp"
 )
@@ -75,7 +74,7 @@ func NewListing(bytes []byte) []Listing {
 	var listing Listing
 	err = json.Unmarshal(bytes, &listing)
 	if err != nil {
-		log.Fatal(err)
+		fmt.Println(err)
 	}
 
 	return []Listing{listing}
