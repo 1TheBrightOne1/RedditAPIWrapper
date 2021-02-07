@@ -169,10 +169,6 @@ func extractTickers(text string) map[string]int {
 		}
 	}
 
-	if len(stocks) > 0 {
-		fmt.Printf("Stocks found %v\n", stocks)
-	}
-
 	return stocks
 }
 

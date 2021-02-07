@@ -33,6 +33,8 @@ func newWatchedItem(id, article string, stocks map[string]int) watchedItem {
 	for stock, score := range stocks {
 		if score > 0 {
 			metrics.Counter.WithLabelValues(stock).Add(float64(score))
+
+			fmt.Printf("Increasing score for %s by %d\n", stock, score)
 		}
 	}
 
@@ -45,12 +47,14 @@ func (w *watchedItem) update(updatedStocks map[string]int) bool {
 		if scoreIncrease := score - w.stocks[stock]; scoreIncrease > 0 {
 			metrics.Counter.WithLabelValues(stock).Add(float64(scoreIncrease))
 			totalIncrease += scoreIncrease
+
+			fmt.Printf("Increasing score for %s by %d\n", stock, scoreIncrease)
 		}
 	}
 
 	ratio := float64(totalIncrease) / time.Now().Sub(w.lastScraped).Hours()
 	metrics.UpvotesPerHour.Observe(ratio)
-	if ratio < 30.0 {
+	if ratio < 10.0 {
 		return false
 	}
 

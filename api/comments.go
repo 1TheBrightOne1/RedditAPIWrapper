@@ -9,7 +9,7 @@ import (
 )
 
 func Get_Comments(link string) *http.Request {
-	url := fmt.Sprintf("%s%s", oauth.Endpoint, link)
+	url := fmt.Sprintf("%s%s?sort=hot", oauth.Endpoint, link)
 
 	req, _ := http.NewRequest("GET", url, nil)
 
