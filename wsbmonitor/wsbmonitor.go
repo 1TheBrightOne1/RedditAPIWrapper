@@ -52,7 +52,7 @@ func (s *Scraper) GetArticlesByStock(stock string) {
 
 func (s *Scraper) getHotArticles() {
 	fmt.Println("Getting Hot Articles")
-	resp, err := s.creds.SendRequest(api.Get_Hot("wallstreetbets", "", "", 0))
+	resp, err := s.creds.SendRequest(api.Get_Hot("wallstreetbets", "", "", 100))
 
 	if err != nil {
 		fmt.Println(err)
@@ -67,7 +67,7 @@ func (s *Scraper) getHotArticles() {
 
 func (s *Scraper) getNewArticles() {
 	fmt.Println("Getting New Articles")
-	resp, err := s.creds.SendRequest(api.Get_New("wallstreetbets", "", s.after, 0))
+	resp, err := s.creds.SendRequest(api.Get_New("wallstreetbets", "", s.after, 100))
 
 	if err != nil {
 		log.Println(err)
@@ -95,11 +95,11 @@ func (s *Scraper) getUpdatedListings() {
 		}
 
 		post := s.watchList.getFreshPost()
-		if post.id == "" {
+		if post.Id == "" {
 			return
 		}
 
-		resp, err := s.creds.SendRequest(api.Get_Comments(post.article))
+		resp, err := s.creds.SendRequest(api.Get_Comments(post.Article))
 
 		if err != nil {
 			return
@@ -177,6 +177,9 @@ func extractTickers(text string) map[string]int {
 	words := strings.Split(text, " ")
 
 	for _, word := range words {
+		if word[0:4] == "http" {
+			continue
+		}
 		matches := charsOnly.FindAllString(word, -1)
 
 		for _, match := range matches {

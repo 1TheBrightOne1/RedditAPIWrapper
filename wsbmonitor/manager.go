@@ -1,7 +1,9 @@
 package wsbmonitor
 
 import (
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"sync"
 	"time"
@@ -10,24 +12,26 @@ import (
 	"github.com/1TheBrightOne1/RedditAPIWrapper/models"
 )
 
-const maxWatchTime = "2d"
+const (
+	maxWatchTime  = "2d"
+	watchListPath = "watchList.json"
+)
 
 type watchedItem struct {
-	id           string
-	article      string
-	stocks       map[string]int
-	upvotes      int
-	lastScraped  time.Time
-	firstScraped time.Time
+	Id           string         `json:"id"`
+	Article      string         `json:"article"`
+	Stocks       map[string]int `json:"stocks"`
+	LastScraped  time.Time      `json:"lastScraped"`
+	FirstScraped time.Time      `json:"firstScraped"`
 }
 
 func newWatchedItem(id, article string, stocks map[string]int) watchedItem {
 	w := watchedItem{
-		id:           id,
-		article:      article,
-		stocks:       stocks,
-		firstScraped: time.Now(),
-		lastScraped:  time.Now(),
+		Id:           id,
+		Article:      article,
+		Stocks:       stocks,
+		FirstScraped: time.Now(),
+		LastScraped:  time.Now(),
 	}
 
 	for stock, score := range stocks {
@@ -44,7 +48,7 @@ func newWatchedItem(id, article string, stocks map[string]int) watchedItem {
 func (w *watchedItem) update(updatedStocks map[string]int) bool {
 	totalIncrease := 0
 	for stock, score := range updatedStocks {
-		if scoreIncrease := score - w.stocks[stock]; scoreIncrease > 0 {
+		if scoreIncrease := score - w.Stocks[stock]; scoreIncrease > 0 {
 			metrics.Counter.WithLabelValues(stock).Add(float64(scoreIncrease))
 			totalIncrease += scoreIncrease
 
@@ -52,36 +56,61 @@ func (w *watchedItem) update(updatedStocks map[string]int) bool {
 		}
 	}
 
-	ratio := float64(totalIncrease) / time.Now().Sub(w.lastScraped).Hours()
+	ratio := float64(totalIncrease) / time.Now().Sub(w.LastScraped).Hours()
 	metrics.UpvotesPerHour.Observe(ratio)
 	if ratio < 10.0 {
 		return false
 	}
 
-	w.lastScraped = time.Now()
-	w.stocks = updatedStocks
+	w.LastScraped = time.Now()
+	w.Stocks = updatedStocks
 	return true
 }
 
 type watchList struct {
-	posts []watchedItem
-	lock  *sync.RWMutex
+	Posts []watchedItem `json:"posts"`
+	lock  *sync.RWMutex `json:"-"`
 }
 
 func newWatchList() *watchList {
-	return &watchList{
-		posts: make([]watchedItem, 10),
-		lock:  &sync.RWMutex{},
+	f, err := os.Open(watchListPath)
+	if err != nil {
+		fmt.Println("Can't load watch list from file")
+		fmt.Println(err)
+
+		return &watchList{
+			Posts: make([]watchedItem, 10),
+			lock:  &sync.RWMutex{},
+		}
 	}
+
+	bytes, _ := ioutil.ReadAll(f)
+
+	w := &watchList{}
+
+	err = json.Unmarshal(bytes, w)
+	if err != nil {
+		fmt.Println("Can't load watch list from file")
+		fmt.Println(err)
+
+		return &watchList{
+			Posts: make([]watchedItem, 10),
+			lock:  &sync.RWMutex{},
+		}
+	}
+
+	w.lock = &sync.RWMutex{}
+
+	return w
 }
 
 func (m *watchList) GetArticlesByStock(stock string) {
 	f, _ := os.Create(fmt.Sprintf("%s.requested", stock))
 	defer f.Close()
-	for _, watched := range m.posts {
-		for s := range watched.stocks {
+	for _, watched := range m.Posts {
+		for s := range watched.Stocks {
 			if stock == s {
-				fmt.Fprintf(f, "%s\n%v\n", watched.article, watched.stocks)
+				fmt.Fprintf(f, "%s\n%v\n", watched.Article, watched.Stocks)
 			}
 		}
 	}
@@ -90,19 +119,20 @@ func (m *watchList) GetArticlesByStock(stock string) {
 func (m *watchList) addToWatchList(id, permalink string, stocks map[string]int) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
-	m.posts = append(m.posts, newWatchedItem(id, permalink, stocks))
+	m.Posts = append(m.Posts, newWatchedItem(id, permalink, stocks))
+	m.persistToFile()
 }
 
 func (m *watchList) getFreshPost() watchedItem {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
-	for i := 0; i < len(m.posts); i++ {
-		next := m.posts[0]
-		m.posts = m.posts[1:]
-		m.posts = append(m.posts, next)
+	for i := 0; i < len(m.Posts); i++ {
+		next := m.Posts[0]
+		m.Posts = m.Posts[1:]
+		m.Posts = append(m.Posts, next)
 
-		if next.lastScraped.Sub(time.Now()).Hours() > 2 {
+		if next.LastScraped.Sub(time.Now()).Hours() > 2 {
 			return next
 		}
 	}
@@ -112,15 +142,16 @@ func (m *watchList) getFreshPost() watchedItem {
 
 func (m *watchList) updatePost(listing models.Listing, stocks map[string]int) {
 	m.lock.RLock()
-	for i, post := range m.posts {
-		if post.id == listing.Data.Name {
+	for i, post := range m.Posts {
+		if post.Id == listing.Data.Name {
 			if !post.update(stocks) {
 				m.lock.RUnlock()
 				m.lock.Lock()
 				defer m.lock.Unlock()
-				m.posts = append(m.posts[0:i], m.posts[i+1:]...)
+				m.Posts = append(m.Posts[0:i], m.Posts[i+1:]...)
 				return
 			}
+			m.persistToFile()
 			m.lock.RUnlock()
 			return
 		}
@@ -128,4 +159,22 @@ func (m *watchList) updatePost(listing models.Listing, stocks map[string]int) {
 
 	m.lock.RUnlock()
 	m.addToWatchList(listing.Data.Name, listing.Data.Link, stocks)
+}
+
+func (m *watchList) persistToFile() {
+	f, err := os.Create(watchListPath)
+	defer f.Close()
+	if err != nil {
+		fmt.Println("Cannot persist watch list to file")
+		fmt.Println(err)
+	}
+
+	bytes, err := json.Marshal(m)
+
+	if err != nil {
+		fmt.Println("Cannot persist watch list to file")
+		fmt.Println(err)
+	}
+
+	fmt.Fprintf(f, "%s", string(bytes))
 }

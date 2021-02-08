@@ -1,6 +1,5 @@
 Push logs to another output
-Run the scraper in a separate go routine and add cmd line functionality to:
-    search for tickers and see what articles mention it
-Dont crash when token expires
-
+Regex out http links
 close files
+reinit watchlist
+bug when restarting and token is expired
