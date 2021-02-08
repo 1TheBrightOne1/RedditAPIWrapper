@@ -102,7 +102,7 @@ func (m *watchList) getFreshPost() watchedItem {
 		m.posts = m.posts[1:]
 		m.posts = append(m.posts, next)
 
-		if next.lastScraped.Sub(time.Now()).Minutes() > 5 {
+		if next.lastScraped.Sub(time.Now()).Hours() > 2 {
 			return next
 		}
 	}
