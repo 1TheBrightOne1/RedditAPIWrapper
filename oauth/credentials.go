@@ -177,6 +177,7 @@ func (creds *Credentials) writeToFile(file *os.File) error {
 
 	writer.Write(bytes)
 	writer.Flush()
+	file.Close()
 
 	return err
 }

@@ -75,10 +75,6 @@ func (s *Scraper) getNewArticles() {
 
 	body, _ := ioutil.ReadAll(resp.Body)
 
-	f, _ := os.Create("out.json")
-	fmt.Fprintf(f, "%s", string(body))
-	f.Close()
-
 	listings := models.NewListing(body)
 
 	s.after = listings[0].Data.After
@@ -196,7 +192,7 @@ func extractTickers(text string) map[string]int {
 func AddToIgnoredStocks(stock string) {
 	delete(watchedStocks, stock)
 
-	f, _ := os.OpenFile("common.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	f, _ := os.OpenFile("/var/stonks/ignoredStocks.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	defer f.Close()
 
 	f.WriteString(stock + "\n")
@@ -204,7 +200,7 @@ func AddToIgnoredStocks(stock string) {
 
 func init() {
 	ignoredStocks := make(map[string]string)
-	file, err := os.Open("ignoredStocks.txt")
+	file, err := os.Open("/var/stonks/ignoredStocks.txt")
 	if err == nil {
 		reader := bufio.NewReader(file)
 		for {
@@ -218,7 +214,7 @@ func init() {
 	}
 
 	watchedStocks = make(map[string]string)
-	file, err = os.Open("tickers.txt")
+	file, err = os.Open("/var/stonks/tickers.txt")
 	if err != nil {
 		log.Fatal(err)
 	}

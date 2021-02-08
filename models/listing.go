@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"regexp"
 )
 
@@ -61,9 +60,6 @@ func NewListing(bytes []byte) []Listing {
 
 	missing := regexp.MustCompile(`\(MISSING\)`)
 	bytes = missing.ReplaceAll(bytes, []byte(""))
-
-	file, _ := os.Create("cleaned.json")
-	fmt.Fprintf(file, string(bytes))
 
 	var listingSlice []Listing
 	err := json.Unmarshal(bytes, &listingSlice)

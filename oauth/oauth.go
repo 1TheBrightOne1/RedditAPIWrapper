@@ -7,22 +7,14 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
-	"path/filepath"
 	"strings"
 )
 
-var (
-	CredentialsFilePath string
+const (
+	CredentialsFilePath = "/var/stonks/.credentials"
 )
 
 func GetCredentials() *Credentials {
-	dir, err := filepath.Abs(filepath.Dir(os.Args[0]))
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	CredentialsFilePath = filepath.Join(dir, ".credentials")
-
 	if _, err := os.Stat(CredentialsFilePath); err != nil {
 		getAppCredentials()
 	}
@@ -61,6 +53,7 @@ func getAppCredentials() {
 	}
 
 	file, err := os.Create(CredentialsFilePath)
+	defer file.Close()
 	if err != nil {
 		log.Fatal(err)
 	}

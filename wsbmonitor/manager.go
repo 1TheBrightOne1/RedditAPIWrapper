@@ -14,7 +14,7 @@ import (
 
 const (
 	maxWatchTime  = "2d"
-	watchListPath = "watchList.json"
+	watchListPath = "/var/stonks/watchList.json"
 )
 
 type watchedItem struct {
@@ -105,7 +105,7 @@ func newWatchList() *watchList {
 }
 
 func (m *watchList) GetArticlesByStock(stock string) {
-	f, _ := os.Create(fmt.Sprintf("%s.requested", stock))
+	f, _ := os.Create(fmt.Sprintf("/var/stonks/%s.requested", stock))
 	defer f.Close()
 	for _, watched := range m.Posts {
 		for s := range watched.Stocks {
