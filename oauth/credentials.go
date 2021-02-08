@@ -11,28 +11,23 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 )
 
 const Endpoint = "https://oauth.reddit.com"
 
 type Credentials struct {
-	ClientID     string        `json:"clientID"`
-	ClientSecret string        `json:"clientSecret"`
-	UserAgent    string        `json:"userAgent"`
-	RedirectURL  string        `json:"redirectURL"`
-	Token        *Token        `json:"token"`
-	Used         int64         `json:"-"`
-	Lock         *sync.RWMutex `json:"-"`
-	Wait         chan int      `json:"-"`
-	ResetTime    time.Time     `json:"-"`
+	ClientID     string    `json:"clientID"`
+	ClientSecret string    `json:"clientSecret"`
+	UserAgent    string    `json:"userAgent"`
+	RedirectURL  string    `json:"redirectURL"`
+	Token        *Token    `json:"token"`
+	Used         int64     `json:"-"`
+	Wait         chan int  `json:"-"`
+	ResetTime    time.Time `json:"-"`
 }
 
 func (creds *Credentials) SendRequest(req *http.Request) (*http.Response, error) {
-	creds.Lock.RLock()
-	defer creds.Lock.RUnlock()
-
 	fmt.Println(req.URL)
 
 	creds.Used++
@@ -61,11 +56,9 @@ func (creds *Credentials) SendRequest(req *http.Request) (*http.Response, error)
 
 	if resp.StatusCode != 200 {
 		fmt.Println("Error in client.Do. Waiting and retrying")
-		creds.Lock.RUnlock()
 
 		creds.refreshToken()
 
-		creds.Lock.RLock()
 		resp, err = client.Do(req)
 
 		if err != nil {
@@ -93,9 +86,6 @@ func (cred *Credentials) LimitHit() bool {
 func (creds *Credentials) manageRate() {
 	dur, _ := time.ParseDuration("60s")
 	time.Sleep(dur)
-
-	creds.Lock.Lock()
-	defer creds.Lock.Unlock()
 
 	fmt.Println("Resetting rate")
 
@@ -152,8 +142,6 @@ func (creds *Credentials) getToken(code string) {
 
 func (creds *Credentials) refreshToken() {
 	fmt.Println("Refreshing token")
-	creds.Lock.Lock()
-	defer creds.Lock.Unlock()
 	reader := strings.NewReader(fmt.Sprintf("grant_type=refresh_token&refresh_token=%s", creds.Token.Refresh))
 	client := &http.Client{}
 	req, _ := http.NewRequest("POST", "https://www.reddit.com/api/v1/access_token", reader)

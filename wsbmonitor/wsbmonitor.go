@@ -167,7 +167,7 @@ func extractTickers(text string) map[string]int {
 	words := strings.Split(text, " ")
 
 	for _, word := range words {
-		matches := charsOnly.FindAllString(word, 10)
+		matches := charsOnly.FindAllString(word, -1)
 
 		for _, match := range matches {
 			cleaned := strings.ToLower(match)

@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 )
 
 var (
@@ -89,6 +88,5 @@ func loadCredentialsFromFile() *Credentials {
 		return nil
 	}
 
-	creds.Lock = &sync.RWMutex{}
 	return creds
 }
