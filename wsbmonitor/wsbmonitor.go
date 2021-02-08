@@ -105,7 +105,12 @@ func (s *Scraper) getUpdatedListings() {
 			return
 		}
 
-		body, _ := ioutil.ReadAll(resp.Body)
+		body, err := ioutil.ReadAll(resp.Body)
+
+		if err != nil {
+			fmt.Println(err.Error())
+			return
+		}
 
 		listing := models.NewListing(body)
 		s.updateArticleScore(listing)
@@ -120,7 +125,12 @@ func (s *Scraper) getCommentsForArticle(link string) {
 		fmt.Println(err.Error())
 	}
 
-	body, _ := ioutil.ReadAll(resp.Body)
+	body, err := ioutil.ReadAll(resp.Body)
+
+	if err != nil {
+		fmt.Println(err.Error())
+		return
+	}
 
 	listings := models.NewListing(body)
 

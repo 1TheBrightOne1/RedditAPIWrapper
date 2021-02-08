@@ -121,6 +121,7 @@ func (m *watchList) updatePost(listing models.Listing, stocks map[string]int) {
 				m.posts = append(m.posts[0:i], m.posts[i+1:]...)
 				return
 			}
+			m.lock.RUnlock()
 			return
 		}
 	}
