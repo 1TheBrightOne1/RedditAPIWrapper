@@ -173,7 +173,7 @@ func extractTickers(text string) map[string]int {
 	words := strings.Split(text, " ")
 
 	for _, word := range words {
-		if word[0:4] == "http" {
+		if len(word) > 4 && word[0:4] == "http" {
 			continue
 		}
 		matches := charsOnly.FindAllString(word, -1)
