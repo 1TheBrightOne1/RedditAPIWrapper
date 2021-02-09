@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/1TheBrightOne1/RedditAPIWrapper/api"
+	"github.com/1TheBrightOne1/RedditAPIWrapper/config"
 	"github.com/1TheBrightOne1/RedditAPIWrapper/models"
 	"github.com/1TheBrightOne1/RedditAPIWrapper/oauth"
 )
@@ -35,7 +36,10 @@ func NewScraper() *Scraper {
 }
 
 func (s *Scraper) Scrape() {
-	//s.getHotArticles()
+	if len(s.watchList.Posts) == 0 {
+		s.getHotArticles()
+	}
+
 	s.after = ""
 	for {
 		s.getNewArticles()
@@ -46,8 +50,8 @@ func (s *Scraper) Scrape() {
 	}
 }
 
-func (s *Scraper) GetArticlesByStock(stock string) {
-	s.watchList.GetArticlesByStock(stock)
+func (s *Scraper) GetArticlesByStock(stock string) []WatchedItem {
+	return s.watchList.GetArticlesByStock(stock)
 }
 
 func (s *Scraper) getHotArticles() {
@@ -145,12 +149,17 @@ func (s *Scraper) addListingsToWatchList() func(models.Listing) {
 
 //updateArticleScore takes a root listing and aggregates all stock mentions and upvotes
 func (s *Scraper) updateArticleScore(listings []models.Listing) {
-	score := make(map[string]int)
-	var root models.Listing
+	var f *os.File
 
+	writer := bufio.NewWriter(f)
+
+	var root models.Listing
+	score := make(map[string]int)
 	aggregator := func(listing models.Listing) {
 		if listing.Kind == "t3" {
 			root = listing
+			f, _ = os.Create(fmt.Sprintf("%s/%s.comments", config.GlobalConfig.HomePath, listing.Data.Name))
+
 			stocks := extractTickers(listing.Data.Title)
 			for stock := range stocks {
 				score[stock] += listing.Data.Ups
@@ -160,16 +169,22 @@ func (s *Scraper) updateArticleScore(listings []models.Listing) {
 			for stock := range stocks {
 				score[stock] += listing.Data.Ups
 			}
+
+			if len(stocks) > 0 && f != nil {
+				writer.WriteString(listing.Data.Body + "\n")
+			}
 		}
 	}
 
 	models.WalkListing(listings, aggregator)
+	if f != nil {
+		f.Close()
+	}
 
 	s.watchList.updatePost(root, score)
 }
 
-func extractTickers(text string) map[string]int {
-	stocks := make(map[string]int)
+func ExtractTickers(text string, handler func(string)) {
 	words := strings.Split(text, " ")
 
 	for _, word := range words {
@@ -181,10 +196,20 @@ func extractTickers(text string) map[string]int {
 		for _, match := range matches {
 			cleaned := strings.ToLower(match)
 			if stock, ok := watchedStocks[cleaned]; ok {
-				stocks[stock] = 1
+				handler(stock)
 			}
 		}
 	}
+}
+
+func extractTickers(text string) map[string]int {
+	stocks := make(map[string]int)
+
+	writeToStocks := func(stock string) {
+		stocks[stock] = 1
+	}
+
+	ExtractTickers(text, writeToStocks)
 
 	return stocks
 }
@@ -192,15 +217,15 @@ func extractTickers(text string) map[string]int {
 func AddToIgnoredStocks(stock string) {
 	delete(watchedStocks, stock)
 
-	f, _ := os.OpenFile("/var/stonks/ignoredStocks.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	f, _ := os.OpenFile(config.GlobalConfig.HomePath+"/ignoredStocks.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	defer f.Close()
 
 	f.WriteString(stock + "\n")
 }
 
-func init() {
+func InitTickers() {
 	ignoredStocks := make(map[string]string)
-	file, err := os.Open("/var/stonks/ignoredStocks.txt")
+	file, err := os.Open(config.GlobalConfig.HomePath + "/ignoredStocks.txt")
 	if err == nil {
 		reader := bufio.NewReader(file)
 		for {
@@ -214,7 +239,7 @@ func init() {
 	}
 
 	watchedStocks = make(map[string]string)
-	file, err = os.Open("/var/stonks/tickers.txt")
+	file, err = os.Open(config.GlobalConfig.HomePath + "/tickers.txt")
 	if err != nil {
 		log.Fatal(err)
 	}

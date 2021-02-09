@@ -8,14 +8,12 @@ import (
 	"log"
 	"os"
 	"strings"
-)
 
-const (
-	CredentialsFilePath = "/var/stonks/.credentials"
+	"github.com/1TheBrightOne1/RedditAPIWrapper/config"
 )
 
 func GetCredentials() *Credentials {
-	if _, err := os.Stat(CredentialsFilePath); err != nil {
+	if _, err := os.Stat(config.GlobalConfig.HomePath + "/.credentials"); err != nil {
 		getAppCredentials()
 	}
 
@@ -52,7 +50,7 @@ func getAppCredentials() {
 		RedirectURL:  redirectURL,
 	}
 
-	file, err := os.Create(CredentialsFilePath)
+	file, err := os.Create(config.GlobalConfig.HomePath + "/.credentials")
 	defer file.Close()
 	if err != nil {
 		log.Fatal(err)
@@ -64,7 +62,7 @@ func getAppCredentials() {
 }
 
 func loadCredentialsFromFile() *Credentials {
-	file, err := os.Open(CredentialsFilePath)
+	file, err := os.Open(config.GlobalConfig.HomePath + "/.credentials")
 	if err != nil {
 		log.Fatal(err)
 	}

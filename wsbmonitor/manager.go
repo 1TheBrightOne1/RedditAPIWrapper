@@ -8,16 +8,16 @@ import (
 	"sync"
 	"time"
 
+	"github.com/1TheBrightOne1/RedditAPIWrapper/config"
 	"github.com/1TheBrightOne1/RedditAPIWrapper/metrics"
 	"github.com/1TheBrightOne1/RedditAPIWrapper/models"
 )
 
-const (
-	maxWatchTime  = "2d"
-	watchListPath = "/var/stonks/watchList.json"
+var (
+	maxWatchTime = "2d"
 )
 
-type watchedItem struct {
+type WatchedItem struct {
 	Id           string         `json:"id"`
 	Article      string         `json:"article"`
 	Stocks       map[string]int `json:"stocks"`
@@ -25,8 +25,8 @@ type watchedItem struct {
 	FirstScraped time.Time      `json:"firstScraped"`
 }
 
-func newWatchedItem(id, article string, stocks map[string]int) watchedItem {
-	w := watchedItem{
+func newWatchedItem(id, article string, stocks map[string]int) WatchedItem {
+	w := WatchedItem{
 		Id:           id,
 		Article:      article,
 		Stocks:       stocks,
@@ -45,7 +45,7 @@ func newWatchedItem(id, article string, stocks map[string]int) watchedItem {
 	return w
 }
 
-func (w *watchedItem) update(updatedStocks map[string]int) bool {
+func (w *WatchedItem) update(updatedStocks map[string]int) bool {
 	totalIncrease := 0
 	for stock, score := range updatedStocks {
 		if scoreIncrease := score - w.Stocks[stock]; scoreIncrease > 0 {
@@ -68,18 +68,18 @@ func (w *watchedItem) update(updatedStocks map[string]int) bool {
 }
 
 type watchList struct {
-	Posts []watchedItem `json:"posts"`
+	Posts []WatchedItem `json:"posts"`
 	lock  *sync.RWMutex `json:"-"`
 }
 
 func newWatchList() *watchList {
-	f, err := os.Open(watchListPath)
+	f, err := os.Open(config.GlobalConfig.HomePath + "/watchList.json")
 	if err != nil {
 		fmt.Println("Can't load watch list from file")
 		fmt.Println(err)
 
 		return &watchList{
-			Posts: make([]watchedItem, 10),
+			Posts: make([]WatchedItem, 10),
 			lock:  &sync.RWMutex{},
 		}
 	}
@@ -94,7 +94,7 @@ func newWatchList() *watchList {
 		fmt.Println(err)
 
 		return &watchList{
-			Posts: make([]watchedItem, 10),
+			Posts: make([]WatchedItem, 10),
 			lock:  &sync.RWMutex{},
 		}
 	}
@@ -104,16 +104,19 @@ func newWatchList() *watchList {
 	return w
 }
 
-func (m *watchList) GetArticlesByStock(stock string) {
-	f, _ := os.Create(fmt.Sprintf("/var/stonks/%s.requested", stock))
+func (m *watchList) GetArticlesByStock(stock string) []WatchedItem {
+	items := make([]WatchedItem, 0)
+	f, _ := os.Create(fmt.Sprintf("%s/%s.requested", config.GlobalConfig.HomePath, stock))
 	defer f.Close()
 	for _, watched := range m.Posts {
 		for s := range watched.Stocks {
 			if stock == s {
-				fmt.Fprintf(f, "%s\n%v\n", watched.Article, watched.Stocks)
+				items = append(items, watched)
+				break
 			}
 		}
 	}
+	return items
 }
 
 func (m *watchList) addToWatchList(id, permalink string, stocks map[string]int) {
@@ -123,7 +126,7 @@ func (m *watchList) addToWatchList(id, permalink string, stocks map[string]int) 
 	m.persistToFile()
 }
 
-func (m *watchList) getFreshPost() watchedItem {
+func (m *watchList) getFreshPost() WatchedItem {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
@@ -137,7 +140,7 @@ func (m *watchList) getFreshPost() watchedItem {
 		}
 	}
 
-	return watchedItem{}
+	return WatchedItem{}
 }
 
 func (m *watchList) updatePost(listing models.Listing, stocks map[string]int) {
@@ -149,6 +152,7 @@ func (m *watchList) updatePost(listing models.Listing, stocks map[string]int) {
 				m.lock.Lock()
 				defer m.lock.Unlock()
 				m.Posts = append(m.Posts[0:i], m.Posts[i+1:]...)
+				os.Remove(fmt.Sprintf("%s/%s.comments", config.GlobalConfig.HomePath, listing.Data.Name))
 				return
 			}
 			m.persistToFile()
@@ -162,7 +166,7 @@ func (m *watchList) updatePost(listing models.Listing, stocks map[string]int) {
 }
 
 func (m *watchList) persistToFile() {
-	f, err := os.Create(watchListPath)
+	f, err := os.Create(config.GlobalConfig.HomePath + "/watchList.json")
 	defer f.Close()
 	if err != nil {
 		fmt.Println("Cannot persist watch list to file")

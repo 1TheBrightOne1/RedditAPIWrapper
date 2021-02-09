@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/1TheBrightOne1/RedditAPIWrapper/config"
 )
 
 const Endpoint = "https://oauth.reddit.com"
@@ -136,7 +138,7 @@ func (creds *Credentials) getToken(code string) {
 	body, _ := ioutil.ReadAll(resp.Body)
 	creds.Token = NewToken(body)
 
-	file, _ := os.Create(CredentialsFilePath)
+	file, _ := os.Create(config.GlobalConfig.HomePath + "/.credentials")
 	creds.writeToFile(file)
 }
 
@@ -162,7 +164,7 @@ func (creds *Credentials) refreshToken() {
 		newToken.Refresh = creds.Token.Refresh
 		creds.Token = newToken
 
-		file, _ := os.Create(CredentialsFilePath)
+		file, _ := os.Create(config.GlobalConfig.HomePath + "/.credentials")
 		creds.writeToFile(file)
 	}
 }

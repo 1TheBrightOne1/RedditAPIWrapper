@@ -1,5 +1,8 @@
-Push logs to another output
-Regex out http links
-close files
-reinit watchlist
-bug when restarting and token is expired
+bug when restarting and token is expired. unverified
+web server that takes
+    remove/add ticker
+    get articles for stock
+    get/edit watchlist
+    tweak freshness param
+
+store relevant comments for a stock
