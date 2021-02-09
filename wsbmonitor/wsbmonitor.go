@@ -151,8 +151,6 @@ func (s *Scraper) addListingsToWatchList() func(models.Listing) {
 func (s *Scraper) updateArticleScore(listings []models.Listing) {
 	var f *os.File
 
-	writer := bufio.NewWriter(f)
-
 	var root models.Listing
 	score := make(map[string]int)
 	aggregator := func(listing models.Listing) {
@@ -171,7 +169,7 @@ func (s *Scraper) updateArticleScore(listings []models.Listing) {
 			}
 
 			if len(stocks) > 0 && f != nil {
-				writer.WriteString(listing.Data.Body + "\n")
+				fmt.Fprintf(f, "%s\n", listing.Data.Body)
 			}
 		}
 	}

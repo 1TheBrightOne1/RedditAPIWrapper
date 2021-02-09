@@ -9,6 +9,6 @@ type Config struct {
 var GlobalConfig Config
 
 func InitConfig() {
-	flag.StringVar(&GlobalConfig.HomePath, "homepath", "/var/stonks", "where persisted data will be stored")
+	flag.StringVar(&GlobalConfig.HomePath, "homepath", "E:/Programming Projects/go/src/github.com/1TheBrightOne1/RedditAPIWrapper", "where persisted data will be stored")
 	flag.Parse()
 }
