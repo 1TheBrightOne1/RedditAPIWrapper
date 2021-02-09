@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 
 	"github.com/1TheBrightOne1/RedditAPIWrapper/wsbmonitor"
@@ -49,6 +50,16 @@ func decodeStockSymbolRequest(ctx context.Context, r *http.Request) (request int
 
 func encodeGetArticlesResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
 	articles := response.([]*Article)
+	if len(articles) == 0 {
+		return nil
+	}
+
+	primaryStock := articles[0].PrimaryStock
+
+	sort.SliceStable(articles, func(i, j int) bool {
+		return articles[i].Upvotes[primaryStock] > articles[j].Upvotes[primaryStock]
+	})
+
 	w.Header().Add("Content-Type", "text/html")
 	var b strings.Builder
 

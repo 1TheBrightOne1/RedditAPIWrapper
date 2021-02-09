@@ -18,10 +18,11 @@ type Service interface {
 }
 
 type Article struct {
-	Link        string
-	Comments    []string
-	LastScraped time.Time
-	Upvotes     map[string]int
+	Link         string
+	Comments     []string
+	LastScraped  time.Time
+	Upvotes      map[string]int
+	PrimaryStock string
 }
 
 type WSBService struct {
@@ -34,9 +35,10 @@ func (w *WSBService) GetArticles(ctx context.Context, tickerSymbol string) []*Ar
 
 	for _, post := range posts {
 		article := &Article{
-			Link:        post.Article,
-			LastScraped: post.LastScraped,
-			Upvotes:     post.Stocks,
+			Link:         post.Article,
+			LastScraped:  post.LastScraped,
+			Upvotes:      post.Stocks,
+			PrimaryStock: tickerSymbol,
 		}
 
 		f, err := os.Open(fmt.Sprintf("%s/%s.comments", config.GlobalConfig.HomePath, post.Id))

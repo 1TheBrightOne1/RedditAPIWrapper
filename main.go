@@ -25,19 +25,6 @@ func main() {
 	h := service.MakeHTTPHandler(s)
 
 	http.ListenAndServe("0.0.0.0:9191", h)
-
-	/*cmd := bufio.NewReader(os.Stdin)
-	for {
-		text, _ := cmd.ReadString('\n')
-		text = strings.TrimSpace(text)
-		values := strings.Split(text, " ")
-
-		if len(values) > 1 && values[0] == "remove" {
-			wsbmonitor.AddToIgnoredStocks(values[1])
-		} else if len(values) > 1 && values[0] == "get" {
-			scraper.GetArticlesByStock(values[1])
-		}
-	}*/
 }
 
 func startPrometheus() {
