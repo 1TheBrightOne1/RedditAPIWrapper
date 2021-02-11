@@ -56,8 +56,22 @@ func (creds *Credentials) SendRequest(req *http.Request) (*http.Response, error)
 	client := &http.Client{}
 	resp, err := client.Do(req)
 
+	if err != nil {
+		for {
+			fmt.Printf("Error sending request. Waiting and retrying. %s\n", err.Error())
+			time.Sleep(time.Second * 30)
+
+			fmt.Println("Retrying")
+			resp, err = client.Do(req)
+			if err != nil {
+				break
+			}
+		}
+
+	}
+
 	if resp.StatusCode != 200 {
-		fmt.Println("Error in client.Do. Waiting and retrying")
+		fmt.Printf("Received status code %d. Waiting and retrying\n", resp.StatusCode)
 
 		creds.refreshToken()
 
